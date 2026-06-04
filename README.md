@@ -27,7 +27,8 @@ pip install -e .
 
 ## 📁 Estructura del Repositorio
 
-``` Tc-Toolbox_ml/
+```
+Tc-Toolbox_ml/
 │
 ├── notebooks/
 │   └── demo.ipynb
@@ -55,9 +56,8 @@ pip install -e .
 - **Python**
 - **Pandas** — manipulación y análisis de datos
 - **NumPy** — operaciones numéricas
-- **Matplotlib** — visualizaciones base
-- **Seaborn** — visualizaciones estadísticas
 - **SciPy** — entorno de desarrollo
+- **Pytest**
 
 
 ---
