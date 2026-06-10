@@ -1,145 +1,122 @@
-"""
-toolbox_ml/eda/core.py
-======================
-Módulo principal de funciones EDA para el paquete toolbox_ml.
-
-Desarrollador 1: describe_df + tipifica_variables
-"""
-
 import pandas as pd
-import numpy as np
+from scipy import stats
 
-
-#describe_df
-
-def describe_df(df: pd.DataFrame) -> pd.DataFrame:
+def get_features_num_regression(
+    df: pd.DataFrame,
+    target_col: str,
+    umbral_corr: float,
+    pvalue: float = None
+) -> list:
     """
-    Genera un resumen estadístico descriptivo de un DataFrame.
-
-    Para cada columna del DataFrame de entrada devuelve su tipo de dato,
-    el porcentaje de valores nulos, el número de valores únicos y el
-    porcentaje de cardinalidad respecto al total de filas.
+    Devuelve columnas numéricas con correlación significativa con el target.
 
     Argumentos:
         df (pd.DataFrame): DataFrame a analizar.
+        target_col (str): Nombre de la columna target numérica.
+        umbral_corr (float): Umbral mínimo de correlación de Pearson (0-1).
+        pvalue (float): Nivel de significancia estadística. Opcional.
 
-    Retorna:
-        pd.DataFrame: DataFrame con una fila por columna del input y las
-        siguientes columnas:
-            - 'tipo'                   : tipo de dato de la columna.
-            - 'porcentaje_nulos'       : % de NaN sobre el total de filas,
-                                         redondeado a 2 decimales.
-            - 'valores_unicos'         : número de valores únicos distintos.
-            - 'porcentaje_cardinalidad': % de valores únicos sobre el total
-                                         de filas, redondeado a 2 decimales.
-        Retorna None si el input no es un DataFrame válido.
+    Lo que devuelve:
+        list: Lista de columnas que superan el umbral. None si falla validación.
     """
-    #Validación de entrada
+    # Validaciones de entrada
     if not isinstance(df, pd.DataFrame):
-        print("Error en describe_df: el argumento 'df' debe ser un pd.DataFrame.")
+        print("Error: df debe ser un pd.DataFrame.")
+        return None
+    if target_col not in df.columns:
+        print(f"Error: '{target_col}' no existe en el DataFrame.")
+        return None
+    if not pd.api.types.is_numeric_dtype(df[target_col]):
+        print("Error: target_col debe ser una columna numérica.")
+        return None
+    if not isinstance(umbral_corr, (int, float)) or not (0 <= umbral_corr <= 1):
+        print("Error: umbral_corr debe ser un float entre 0 y 1.")
+        return None
+    if pvalue is not None and not (0 <= pvalue <= 1):
+        print("Error: pvalue debe ser un float entre 0 y 1.")
         return None
 
-    total_filas = len(df)
+    # Seleccionamos columnas numéricas excepto el target
+    columnas_num = df.select_dtypes(include='number').columns.tolist()
+    columnas_num = [c for c in columnas_num if c != target_col]
 
-    #Construción de cada métrica como una Series indexada por nombre de columna
-    tipos = df.dtypes
+    resultado = []
 
-    #Porcentaje de nulos: (nulos / total_filas) * 100
-    pct_nulos = (df.isnull().sum() / total_filas * 100).round(2)
+    for col in columnas_num:
+        # Eliminamos nulos para el cálculo
+        datos = df[[col, target_col]].dropna()
+        corr, p = stats.pearsonr(datos[col], datos[target_col])
 
-    #Valores únicos: contamos sin contar NaN como único valor adicional
-    n_unicos = df.nunique()
+        # Filtramos por umbral de correlación
+        if abs(corr) >= umbral_corr:
+            # Si se especifica pvalue, filtramos también por significancia
+            if pvalue is None or p < pvalue:
+                resultado.append(col)
 
-    #Porcentaje de cardinalidad respecto al total de filas
-    pct_cardinalidad = (n_unicos / total_filas * 100).round(2)
-
-    #Ensamblamos el DataFrame resultado
-    resultado = pd.DataFrame({
-        "tipo": tipos,
-        "porcentaje_nulos": pct_nulos,
-        "valores_unicos": n_unicos,
-        "porcentaje_cardinalidad": pct_cardinalidad,
-    })
-
-    #El índice ya son los nombres de columna, debido a cómo construimos las Series
     return resultado
 
 
-#tipifica_variables
-
-
-def tipifica_variables(
+def plot_features_num_regression(
     df: pd.DataFrame,
-    umbral_categoria: int,
-    umbral_continua: float,
-) -> pd.DataFrame:
+    target_col: str = "",
+    columns: list = [],
+    umbral_corr: float = 0,
+    pvalue: float = None
+) -> list:
     """
-    Sugiere el tipo estadístico de cada columna de un DataFrame.
-
-    Aplica la siguiente lógica en cascada para cada columna:
-        1. Cardinalidad == 2                                      --> "Binaria"
-        2. Cardinalidad <  umbral_categoria                       --> "Categórica"
-        3. Cardinalidad >= umbral_categoria  Y  %cardinalidad >= umbral_continua
-                                                                 --> "Numérica Continua"
-        4. Cardinalidad >= umbral_categoria  Y  %cardinalidad <  umbral_continua
-                                                                -->  "Numérica Discreta"
+    Pinta pairplots de columnas numéricas correlacionadas con el target.
 
     Argumentos:
-        df (pd.DataFrame)        : DataFrame a analizar.
-        umbral_categoria (int)   : umbral de cardinalidad para distinguir variables
-                                   categóricas de numéricas.  Debe ser un entero > 0.
-        umbral_continua (float)  : umbral de porcentaje de cardinalidad para distinguir
-                                   variables numéricas continuas de discretas.
-                                   Debe ser un float entre 0 y 100.
+        df (pd.DataFrame): DataFrame a analizar.
+        target_col (str): Nombre de la columna target.
+        columns (list): Columnas candidatas. Si está vacía usa todas las numéricas.
+        umbral_corr (float): Umbral mínimo de correlación (0-1).
+        pvalue (float): Nivel de significancia. Opcional.
 
-    Retorna:
-        pd.DataFrame: DataFrame con columnas 'nombre_variable' y 'tipo_sugerido',
-        con una fila por columna del DataFrame de entrada.
-        Retorna None si alguna validación de entrada falla.
+    Lo que devuelve:
+        list: Columnas representadas. None si falla validación.
     """
-    #Validaciones de entrada
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
+    # Reutilizamos las validaciones de get_features_num_regression
     if not isinstance(df, pd.DataFrame):
-        print("Error en tipifica_variables: 'df' debe ser un pd.DataFrame.")
+        print("Error: df debe ser un pd.DataFrame.")
+        return None
+    if target_col not in df.columns:
+        print(f"Error: '{target_col}' no existe en el DataFrame.")
+        return None
+    if not pd.api.types.is_numeric_dtype(df[target_col]):
+        print("Error: target_col debe ser numérica.")
+        return None
+    if not isinstance(umbral_corr, (int, float)) or not (0 <= umbral_corr <= 1):
+        print("Error: umbral_corr debe ser un float entre 0 y 1.")
         return None
 
-    if not isinstance(umbral_categoria, int) or umbral_categoria <= 0:
-        print(
-            "Error en tipifica_variables: 'umbral_categoria' debe ser un entero positivo."
-        )
-        return None
+    # Si columns está vacía usamos todas las numéricas
+    if not columns:
+        columns = df.select_dtypes(include='number').columns.tolist()
+        columns = [c for c in columns if c != target_col]
 
-    if not isinstance(umbral_continua, (int, float)) or not (0 <= umbral_continua <= 100):
-        print(
-            "Error en tipifica_variables: 'umbral_continua' debe ser un float entre 0 y 100."
-        )
-        return None
+    # Filtramos por correlación
+    columnas_validas = []
+    for col in columns:
+        datos = df[[col, target_col]].dropna()
+        corr, p = stats.pearsonr(datos[col], datos[target_col])
+        if abs(corr) >= umbral_corr:
+            if pvalue is None or p < pvalue:
+                columnas_validas.append(col)
 
-    total_filas = len(df)
-    nombres = []
-    tipos_sugeridos = []
+    if not columnas_validas:
+        print("No hay columnas que superen los criterios.")
+        return []
 
-    for col in df.columns:
-        cardinalidad = df[col].nunique()
+    # Si hay más de 5 columnas las dividimos en grupos de 5
+    grupos = [columnas_validas[i:i+4] for i in range(0, len(columnas_validas), 4)]
 
-        #Porcentaje de cardinalidad respecto al total de filas
-        pct_cardinalidad = (cardinalidad / total_filas * 100) if total_filas > 0 else 0
+    for grupo in grupos:
+        cols_plot = [target_col] + grupo
+        sns.pairplot(df[cols_plot].dropna())
+        plt.show()
 
-        #Aplicamos la lógica en cascada
-        if cardinalidad == 2:
-            tipo = "Binaria"
-        elif cardinalidad < umbral_categoria:
-            tipo = "Categórica"
-        elif pct_cardinalidad >= umbral_continua:
-            tipo = "Numérica Continua"
-        else:
-            tipo = "Numérica Discreta"
-
-        nombres.append(col)
-        tipos_sugeridos.append(tipo)
-
-    resultado = pd.DataFrame({
-        "nombre_variable": nombres,
-        "tipo_sugerido": tipos_sugeridos,
-    })
-
-    return resultado
+    return columnas_validas
