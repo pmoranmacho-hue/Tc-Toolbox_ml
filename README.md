@@ -69,6 +69,6 @@ Tc-Toolbox_ml/
 | Pablo Morán | Scrum Master | Setup del repo, setup.py, __init__.py, integración final, notebook demo |
 | Ana Belén Escobar | Desarrollador 1 | describe_df + tipifica_variables + sus tests |
 | Lucía Vetrano| Desarollador 2 | get/plot_features_num_regression + sus test |
-| | Desarrollador 3 | get/plot_features_cat_regression + sus tests + función bonus |
+| Nil Coronado| Desarrollador 3 | get/plot_features_cat_regression + sus tests + función bonus |
 
 ---
